@@ -10,6 +10,10 @@ import os
 # CONFIGURATION
 # =====================
 
+from keep_alive import keep_alive
+
+keep_alive()
+
 BOT_TOKEN = "MTQ1NTU5OTk0NzMxODU2MjkwOQ.GpIuW7.-I0mMp4tSG37tueov3jowbk8uKKNwUghzw3EXY"
 DAILY_CHANNEL_ID = 1329895128973709486  # Replace with your channel ID
 
