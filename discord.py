@@ -10,8 +10,8 @@ import os
 # CONFIGURATION
 # =====================
 
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
-DAILY_CHANNEL_ID = 123456789012345678  # Replace with your channel ID
+BOT_TOKEN = MTQ1NTU5OTk0NzMxODU2MjkwOQ.Gdk-v0.TzHB_0HIGoXCpPIGghVtUanoLyjcwsvAN8p5uY
+DAILY_CHANNEL_ID = 1329895128973709486  # Replace with your channel ID
 
 BASE_URL = "https://stepdatabase.maths.org/database/db/{X}/{X}-S{Y}-Q{Z}.png"
 
@@ -69,18 +69,16 @@ async def step_command(ctx, *, arg=None):
             "Examples:\n"
             "`!step 97-S2-1`\n"
             "`!step Spec-S3-5`\n\n"
-            "Years 00–18 correspond to 2000–2018.\n"
-            "`Spec` refers to the Specimen paper."
         )
         return
 
     try:
-        left, z = arg.split("-")
+        left, z = arg.split("-Q") if "-Q" in arg else (arg.split("-")[0], arg.split("-")[1][1])
         X, sY = left.split("-S") if "-S" in left else (left.split("-")[0], left.split("-")[1][1])
         Y = sY
         Z = int(z)
     except Exception:
-        await ctx.send("Invalid format. Use `!step XX-SY-Z` (e.g. `97-S2-1`).")
+        await ctx.send("Invalid format. Use `!step XX-SY-QZ` (e.g. `97-S2-Q1`).")
         return
 
     if X not in valid_X_values() or Y not in {"2", "3"} or not (1 <= Z <= 16):
