@@ -10,7 +10,7 @@ import os
 # CONFIGURATION
 # =====================
 
-BOT_TOKEN = MTQ1NTU5OTk0NzMxODU2MjkwOQ.Gdk-v0.TzHB_0HIGoXCpPIGghVtUanoLyjcwsvAN8p5uY
+BOT_TOKEN = "MTQ1NTU5OTk0NzMxODU2MjkwOQ.GpIuW7.-I0mMp4tSG37tueov3jowbk8uKKNwUghzw3EXY"
 DAILY_CHANNEL_ID = 1329895128973709486  # Replace with your channel ID
 
 BASE_URL = "https://stepdatabase.maths.org/database/db/{X}/{X}-S{Y}-Q{Z}.png"
@@ -65,10 +65,10 @@ async def step_command(ctx, *, arg=None):
     if arg is None or arg.lower() == "help":
         await ctx.send(
             "**STEP Bot Usage**\n"
-            "`!step XX-SY-Z`\n\n"
+            "`!step XX-SY-QZ`\n\n"
             "Examples:\n"
-            "`!step 97-S2-1`\n"
-            "`!step Spec-S3-5`\n\n"
+            "`!step 97-S2-Q1`\n"
+            "`!step Spec-S3-Q5`\n\n"
         )
         return
 
