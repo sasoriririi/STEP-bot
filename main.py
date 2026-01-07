@@ -1,23 +1,23 @@
+import os
+import random
+import requests
+import datetime
 import discord
 from discord.ext import commands, tasks
-import requests
-import random
-import datetime
-import asyncio
-import os
 
 # =====================
 # CONFIGURATION
 # =====================
 
-from keep_alive import keep_alive
+BOT_TOKEN = os.environ["DISCORD_TOKEN"]
+DAILY_CHANNEL_ID = 1329895128973709486
 
-keep_alive()
+BASE_URL = (
+    "https://github.com/sasoriririi/STEP-bot/blob/main/"
+    "question_images/{X}-S{Y}-Q{Z}.png?raw=true"
+)
 
-BOT_TOKEN = "MTQ1NTU5OTk0NzMxODU2MjkwOQ.GpIuW7.-I0mMp4tSG37tueov3jowbk8uKKNwUghzw3EXY"
-DAILY_CHANNEL_ID = 1329895128973709486  # Replace with your channel ID
-
-BASE_URL = "https://stepdatabase.maths.org/database/db/{X}/{X}-S{Y}-Q{Z}.png"
+TIMEZONE = datetime.timezone.utc  # change if needed
 
 # =====================
 # BOT SETUP
@@ -25,11 +25,10 @@ BASE_URL = "https://stepdatabase.maths.org/database/db/{X}/{X}-S{Y}-Q{Z}.png"
 
 intents = discord.Intents.default()
 intents.message_content = True
-
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =====================
-# UTILITIES
+# QUESTION UTILITIES
 # =====================
 
 def valid_X_values():
@@ -40,12 +39,12 @@ def valid_X_values():
 
 def format_label(X, Y, Z):
     if X == "Spec":
-        year_label = "Specimen"
+        year = "Specimen"
     else:
-        year_num = int(X)
-        year_label = f"20{X}" if year_num <= 18 else f"19{X}"
+        n = int(X)
+        year = f"20{X}" if n <= 18 else f"19{X}"
 
-    return f"STEP {Y} {year_label}, Question {Z}"
+    return f"STEP {Y} {year}, Question {Z}"
 
 def image_exists(url):
     try:
@@ -54,78 +53,82 @@ def image_exists(url):
     except requests.RequestException:
         return False
 
-def random_question():
-    X = random.choice(valid_X_values())
-    Y = random.choice(["2", "3"])
-    Z = random.randint(1, 16)
-    return X, Y, Z
+def random_question(include_step1=False):
+    Y_choices = ["2", "3"] if not include_step1 else ["1", "2", "3"]
+
+    while True:
+        X = random.choice(valid_X_values())
+        Y = random.choice(Y_choices)
+        Z = random.randint(1, 16)
+
+        url = BASE_URL.format(X=X, Y=Y, Z=Z)
+        if image_exists(url):
+            return X, Y, Z, url
 
 # =====================
 # COMMANDS
 # =====================
 
 @bot.command(name="step")
-async def step_command(ctx, *, arg=None):
+async def step(ctx, *, arg=None):
     if arg is None or arg.lower() == "help":
         await ctx.send(
-            "**STEP Bot Usage**\n"
-            "`!step XX-SY-QZ`\n\n"
+            "**STEP Bot Commands**\n\n"
+            "`!step XX-SY-QZ` — show a specific question\n"
+            "`!step random` — show a random STEP 2 or 3 question\n"
+            "`!step help` — show this message\n\n"
             "Examples:\n"
             "`!step 97-S2-Q1`\n"
-            "`!step Spec-S3-Q5`\n\n"
+            "`!step Spec-S1-Q4`"
         )
         return
 
-    try:
-        left, z = arg.split("-Q") if "-Q" in arg else (arg.split("-")[0], arg.split("-")[1][1])
-        X, sY = left.split("-S") if "-S" in left else (left.split("-")[0], left.split("-")[1][1])
-        Y = sY
-        Z = int(z)
-    except Exception:
-        await ctx.send("Invalid format. Use `!step XX-SY-QZ` (e.g. `97-S2-Q1`).")
+    if arg.lower() == "random":
+        X, Y, Z, url = random_question(include_step1=False)
+        await ctx.send(format_label(X, Y, Z))
+        await ctx.send(url)
         return
 
-    if X not in valid_X_values() or Y not in {"2", "3"} or not (1 <= Z <= 16):
+    try:
+        part1, part2, part3 = arg.split("-")
+        X = part1
+        Y = part2[1:]
+        Z = int(part3[1:])
+    except Exception:
+        await ctx.send("Invalid format. Use `!step XX-SY-QZ`.")
+        return
+
+    if X not in valid_X_values() or Y not in {"1", "2", "3"} or not (1 <= Z <= 16):
         await ctx.send("Invalid STEP question reference.")
         return
 
     url = BASE_URL.format(X=X, Y=Y, Z=Z)
-
     if not image_exists(url):
         await ctx.send("That STEP question could not be found.")
         return
 
-    label = format_label(X, Y, Z)
-    await ctx.send(label)
+    await ctx.send(format_label(X, Y, Z))
     await ctx.send(url)
 
 # =====================
 # DAILY TASK
 # =====================
 
-@tasks.loop(minutes=1)
+@tasks.loop(time=datetime.time(hour=12, tzinfo=TIMEZONE))
 async def daily_step():
-    now = datetime.datetime.now()
-    if now.hour == 12 and now.minute == 0:
-        channel = bot.get_channel(DAILY_CHANNEL_ID)
-        if channel is None:
-            return
+    channel = bot.get_channel(DAILY_CHANNEL_ID)
+    if channel is None:
+        return
 
-        for _ in range(50):  # retry until a valid question is found
-            X, Y, Z = random_question()
-            url = BASE_URL.format(X=X, Y=Y, Z=Z)
-            if image_exists(url):
-                label = format_label(X, Y, Z)
-                await channel.send(label)
-                await channel.send(url)
-                break
-
-        await asyncio.sleep(60)  # prevent double posting
+    X, Y, Z, url = random_question(include_step1=False)
+    await channel.send(format_label(X, Y, Z))
+    await channel.send(url)
 
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
-    daily_step.start()
+    if not daily_step.is_running():
+        daily_step.start()
 
 # =====================
 # RUN
