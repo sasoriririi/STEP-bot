@@ -6,6 +6,7 @@ import asyncio
 import discord
 from discord.ext import commands, tasks
 import aiohttp
+from aiohttp import web
 
 # =====================
 # CONFIGURATION
@@ -150,7 +151,25 @@ async def daily_step():
     await channel.send(url)
 
 # =====================
-# LIFECYCLE EVENTS
+# HTTP SERVER (RENDER)
+# =====================
+
+async def healthcheck(request):
+    return web.Response(text="OK")
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", healthcheck)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+# =====================
+# LIFECYCLE
 # =====================
 
 @bot.event
@@ -161,6 +180,8 @@ async def on_ready():
 
     if not daily_step.is_running():
         daily_step.start()
+
+    await start_web_server()
 
     print(f"Logged in as {bot.user}")
 
