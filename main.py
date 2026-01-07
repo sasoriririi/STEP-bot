@@ -1,16 +1,24 @@
 import os
 import random
-import requests
 import datetime
+import asyncio
+
 import discord
 from discord.ext import commands, tasks
+import aiohttp
 
 # =====================
 # CONFIGURATION
 # =====================
 
-BOT_TOKEN = os.environ["DISCORD_TOKEN"]
-DAILY_CHANNEL_ID = 1329895128973709486
+BOT_TOKEN = os.getenv("DISCORD_TOKEN")
+if not BOT_TOKEN:
+    raise RuntimeError(
+        "DISCORD_TOKEN environment variable is not set. "
+        "Add it to your deployment environment."
+    )
+
+DAILY_CHANNEL_ID = 123456789012345678  # replace with your channel ID
 
 BASE_URL = (
     "https://github.com/sasoriririi/STEP-bot/blob/main/"
@@ -25,10 +33,13 @@ TIMEZONE = datetime.timezone.utc  # change if needed
 
 intents = discord.Intents.default()
 intents.message_content = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+http_session: aiohttp.ClientSession | None = None
+
 # =====================
-# QUESTION UTILITIES
+# STEP UTILITIES
 # =====================
 
 def valid_X_values():
@@ -37,7 +48,7 @@ def valid_X_values():
     xs += [f"{i:02d}" for i in range(0, 19)]
     return xs
 
-def format_label(X, Y, Z):
+def format_label(X: str, Y: str, Z: int) -> str:
     if X == "Spec":
         year = "Specimen"
     else:
@@ -46,54 +57,68 @@ def format_label(X, Y, Z):
 
     return f"STEP {Y} {year}, Question {Z}"
 
-def image_exists(url):
+async def image_exists(url: str) -> bool:
     try:
-        r = requests.head(url, timeout=5)
-        return r.status_code == 200
-    except requests.RequestException:
+        async with http_session.head(
+            url,
+            timeout=aiohttp.ClientTimeout(total=5),
+            allow_redirects=True
+        ) as resp:
+            return resp.status == 200
+    except aiohttp.ClientError:
         return False
 
-def random_question(include_step1=False):
+async def random_question(include_step1: bool = False):
     Y_choices = ["2", "3"] if not include_step1 else ["1", "2", "3"]
 
-    while True:
+    for _ in range(50):  # bounded retries
         X = random.choice(valid_X_values())
         Y = random.choice(Y_choices)
         Z = random.randint(1, 16)
 
         url = BASE_URL.format(X=X, Y=Y, Z=Z)
-        if image_exists(url):
+        if await image_exists(url):
             return X, Y, Z, url
+
+    raise RuntimeError("Unable to find a valid STEP question.")
 
 # =====================
 # COMMANDS
 # =====================
 
 @bot.command(name="step")
-async def step(ctx, *, arg=None):
+async def step(ctx, *, arg: str | None = None):
     if arg is None or arg.lower() == "help":
         await ctx.send(
             "**STEP Bot Commands**\n\n"
             "`!step XX-SY-QZ` — show a specific question\n"
-            "`!step random` — show a random STEP 2 or 3 question\n"
+            "`!step random` — random STEP 2 or 3 question\n"
             "`!step help` — show this message\n\n"
             "Examples:\n"
             "`!step 97-S2-Q1`\n"
-            "`!step Spec-S1-Q4`"
+            "`!step Spec-S1-Q4`\n\n"
         )
         return
 
     if arg.lower() == "random":
-        X, Y, Z, url = random_question(include_step1=False)
+        try:
+            X, Y, Z, url = await random_question(include_step1=False)
+        except RuntimeError:
+            await ctx.send("Failed to find a valid STEP question.")
+            return
+
         await ctx.send(format_label(X, Y, Z))
         await ctx.send(url)
         return
 
     try:
-        part1, part2, part3 = arg.split("-")
-        X = part1
-        Y = part2[1:]
-        Z = int(part3[1:])
+        X, sY, qZ = arg.split("-")
+        if not sY.startswith("S"):
+            raise ValueError
+	if not qZ.startswith("Q"):
+            raise ValueError
+        Y = sY[1:]
+        Z = int(qZ[1:])
     except Exception:
         await ctx.send("Invalid format. Use `!step XX-SY-QZ`.")
         return
@@ -103,7 +128,7 @@ async def step(ctx, *, arg=None):
         return
 
     url = BASE_URL.format(X=X, Y=Y, Z=Z)
-    if not image_exists(url):
+    if not await image_exists(url):
         await ctx.send("That STEP question could not be found.")
         return
 
@@ -111,7 +136,7 @@ async def step(ctx, *, arg=None):
     await ctx.send(url)
 
 # =====================
-# DAILY TASK
+# DAILY QUESTION TASK
 # =====================
 
 @tasks.loop(time=datetime.time(hour=12, tzinfo=TIMEZONE))
@@ -120,15 +145,41 @@ async def daily_step():
     if channel is None:
         return
 
-    X, Y, Z, url = random_question(include_step1=False)
+    try:
+        X, Y, Z, url = await random_question(include_step1=False)
+    except RuntimeError:
+        return
+
     await channel.send(format_label(X, Y, Z))
     await channel.send(url)
 
+# =====================
+# LIFECYCLE EVENTS
+# =====================
+
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")
+    global http_session
+    if http_session is None:
+        http_session = aiohttp.ClientSession()
+
     if not daily_step.is_running():
         daily_step.start()
+
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_disconnect():
+    print("Bot disconnected.")
+
+@bot.event
+async def on_resumed():
+    print("Bot resumed.")
+
+@bot.event
+async def close():
+    if http_session:
+        await http_session.close()
 
 # =====================
 # RUN
