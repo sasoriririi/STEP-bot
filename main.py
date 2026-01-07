@@ -113,10 +113,6 @@ async def step(ctx, *, arg: str | None = None):
 
     try:
         X, sY, qZ = arg.split("-")
-        if not sY.startswith("S"):
-            raise ValueError
-        if not qZ.startswith("Q"):
-            raise ValueError
         Y = sY[1:]
         Z = int(qZ[1:])
     except Exception:
