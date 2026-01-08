@@ -19,7 +19,7 @@ if not BOT_TOKEN:
         "Add it to your deployment environment."
     )
 
-DAILY_CHANNEL_ID = 123456789012345678  # replace with your channel ID
+DAILY_CHANNEL_ID = 1329895128973709486
 
 BASE_URL = (
     "https://github.com/sasoriririi/STEP-bot/blob/main/"
